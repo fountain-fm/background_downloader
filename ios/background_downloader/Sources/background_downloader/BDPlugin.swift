@@ -1,4 +1,5 @@
 import Flutter
+import AVFoundation
 import UIKit
 import BackgroundTasks
 import os.log
@@ -48,7 +49,7 @@ public class BDPlugin: NSObject, FlutterPlugin, UNUserNotificationCenterDelegate
     static var mimeTypes = [String : String]() // [taskId : mimeType]
     static var charSets = [String : String]() // [taskId : charSet]
     static var holdingQueue: HoldingQueue? = nil
-    
+    static var hlsTaskByNativeId = [String: Task]() // AVAssetDownloadTask.taskIdentifier -> Task
     static var propertyLock: NSLock = NSLock() // used to synchronize access to static properties
     
     public static var backgroundChannel: FlutterMethodChannel? // for native <-> plugin comms
@@ -88,7 +89,7 @@ public class BDPlugin: NSObject, FlutterPlugin, UNUserNotificationCenterDelegate
             case "enqueue":
                 await methodEnqueue(call: call, result: result)
             case "enqueueAll":
-                await methodEnqueueAll(call: call, result: result)
+                 methodEnqueueAll(call: call, result: result)
             case "allTasks":
                 await methodAllTasks(call: call, result: result)
             case "cancelTasksWithIds":
@@ -242,6 +243,7 @@ public class BDPlugin: NSObject, FlutterPlugin, UNUserNotificationCenterDelegate
     
     /// Do the actual enqueue as a URLSessionTask
     public func doEnqueue(taskJsonString: String, notificationConfigJsonString: String?, resumeDataAsBase64String: String) async -> Bool {
+        
         let taskDescription = notificationConfigJsonString == nil ? taskJsonString : taskJsonString + separatorString + notificationConfigJsonString!
         var isResume = !resumeDataAsBase64String.isEmpty
         let resumeData = isResume ? Data(base64Encoded: resumeDataAsBase64String) : nil
@@ -258,6 +260,28 @@ public class BDPlugin: NSObject, FlutterPlugin, UNUserNotificationCenterDelegate
         isResume = isParallelDownloadTask(task: task) ? isResume : isResume && resumeData != nil
         let verb = isResume ? "Enqueueing (to resume)" : "Enqueueing"
         os_log("%@ task with id %@", log: log, type: .info, verb, task.taskId)
+        
+        
+        let hlsInfo = parseHlsMeta(task.metaData)   // same helper you already wrote
+        if hlsInfo.isHls {
+          // Optional bitrate hint if you didn't pre-pick a variant:
+          let hint: Int? = hlsInfo.height.flatMap { h in
+            switch h {
+              case ..<361: return 400_000
+              case ..<721: return 1_500_000
+              case ..<1441: return 4_000_000
+              default: return 8_000_000
+            }
+          }
+
+            
+          let ok = HlsDownloadManager.shared.start(task: task, bitrateHint: hint)
+          if ok {
+            await postEnqueuedStatusIfNotAlreadyDone(task: task, notificationConfigJsonString: notificationConfigJsonString)
+          }
+          return ok
+        }
+        
         UrlSessionDelegate.createUrlSession()
         guard let url = validateUrl(task) else
         {
@@ -994,5 +1018,16 @@ public class BDPlugin: NSObject, FlutterPlugin, UNUserNotificationCenterDelegate
                 do {}
             }
         }
+    }
+    
+    /// `parseHlsMeta`
+    private func parseHlsMeta(_ meta: String?) -> (isHls: Bool, height: Int?) {
+        guard let meta = meta,
+              let data = meta.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return (false, nil) }
+        let type = (obj["type"] as? String)?.uppercased()
+        let height = obj["height"] as? Int
+        return (type == "HLS", height)
     }
 }

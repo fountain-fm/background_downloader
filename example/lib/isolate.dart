@@ -15,16 +15,16 @@ Future<void> backgroundIsolateEntryPoint(Object? _) async {
 }
 
 /// Downloads a file
-Future<void> download() async {
+Future<void> download({Task? task}) async {
   await FileDownloader()
       .enqueue(
-        DownloadTask(
-          url:
-              'https://storage.googleapis.com/approachcharts/test/5MB-test.ZIP',
-          filename: 'File_${Random().nextInt(1000)}',
-          group: 'bunch',
-          updates: Updates.statusAndProgress,
-        ),
+        task ??
+            DownloadTask(
+              url: 'https://storage.googleapis.com/approachcharts/test/5MB-test.ZIP',
+              filename: 'File_${Random().nextInt(1000)}',
+              group: 'bunch',
+              updates: Updates.statusAndProgress,
+            ),
       )
       .timeout(const Duration(seconds: 2));
 }

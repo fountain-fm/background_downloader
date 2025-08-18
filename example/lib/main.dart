@@ -302,12 +302,6 @@ class _MyAppState extends State<MyApp> {
             url: downloadWithError
                 ? 'https://avmaps-dot-bbflightserver-hrd.appspot.com/public/get_current_app_data' // returns 403 status code
                 : 'https://storage.googleapis.com/approachcharts/test/5MB-test.ZIP',
-            filename: 'zipfile.zip',
-            directory: 'my/directory',
-            baseDirectory: BaseDirectory.applicationDocuments,
-            updates: Updates.statusAndProgress,
-            retries: 3,
-            allowPause: true,
             metaData: '<example metaData>',
             displayName: 'My display name');
         await FileDownloader().enqueue(backgroundDownloadTask!);
@@ -454,16 +448,25 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
+  /// `processLoadHLS`
   Future<void> processLoadHLS() async {
+    // HLS download task
     if (!loadHLSInProgress) {
       final HlsDownloadTask hlsTask = HlsDownloadTask(
-        url: 'https://example.com/playlist.m3u8',
-        filename: 'video.m3u8',
-      );
+          taskId: 'hlsTask',
+          url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+          filename: 'hls.m3u8',
+          quality: HlsQuality.q720,
+          retries: 3,
+          allowPause: true,
+          baseDirectory: BaseDirectory.applicationSupport,
+          directory: Directory.current.path,
+          updates: Updates.statusAndProgress);
       setState(() {
         loadHLSInProgress = true;
       });
-
+      await download(task: hlsTask);
+      debugPrint("Downloaded to: ${await hlsTask.filePath()}");
       setState(() {
         // loadHLSResult = result;
         loadHLSInProgress = false;
