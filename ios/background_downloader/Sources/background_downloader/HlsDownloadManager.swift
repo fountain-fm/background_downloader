@@ -32,18 +32,21 @@ final class HlsDownloadManager: NSObject {
         let urlString = task.url
 
         guard let url = URL(string: urlString) else { return false }
-
-        let asset = AVURLAsset(url: url)
-        var options: [String: Any] = [:]
-        if let hint = bitrateHint {
-            options[AVAssetDownloadTaskMinimumRequiredMediaBitrateKey] = hint
+        let _asset_with_headers = AVURLAsset(url: url,
+                                             options:  [ "AVURLAssetHTTPHeaderFieldsKey": task.headers])
+        let _requires_WiFi = taskRequiresWiFi(task: task)
+        if (_requires_WiFi) {
+            _config.allowsCellularAccess = false
+            BDPlugin.propertyLock.withLock {
+                _ = BDPlugin.taskIdsRequiringWiFi.insert(task.taskId)
+            }
         }
-
+        
         guard let dl = _session.makeAssetDownloadTask(
-            asset: asset,
+            asset: _asset_with_headers,
             assetTitle: task.filename,
             assetArtworkData: nil,
-            options: options
+            options: bitrateHint != nil ? [AVAssetDownloadTaskMinimumRequiredMediaBitrateKey: bitrateHint!] : [:]
         ) else { return false }
 
         _lock.lock(); _task_cache_native_id[dl.taskIdentifier] = task; _lock.unlock()

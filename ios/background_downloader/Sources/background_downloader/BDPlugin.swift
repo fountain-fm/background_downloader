@@ -259,7 +259,6 @@ public class BDPlugin: NSObject, FlutterPlugin, UNUserNotificationCenterDelegate
 
         let hlsInfo = parseHlsMeta(task.metaData) // same helper you already wrote
         if hlsInfo.isHls {
-            // Optional bitrate hint if you didn't pre-pick a variant:
             let hint: Int? = hlsInfo.height.flatMap { h in
                 switch h {
                 case ..<361: return 400_000
