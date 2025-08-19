@@ -10,7 +10,7 @@ import UIKit
 
 @objc(BackgroundDownloaderPlugin) // Keep the Objective-C name for compatibility
 public class BackgroundDownloaderPlugin: NSObject, FlutterPlugin {
-  public static func register(with registrar: FlutterPluginRegistrar) {
-    BDPlugin.register(with: registrar)
-  }
+    public static func register(with registrar: FlutterPluginRegistrar) {
+        BDPlugin.register(with: registrar)
+    }
 }

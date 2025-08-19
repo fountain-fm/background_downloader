@@ -15,9 +15,8 @@ func doOpenFile(filePath: String, mimeType: String?) -> Bool {
     let documentInteractionController = UIDocumentInteractionController(url: fileUrl)
     let delegate = DocumentInteractionControllerDelegate()
     documentInteractionController.delegate = delegate
-    if (mimeType != nil) {
-        if let uti = UTTypeCreatePreferredIdentifierForTag(kUTTagClassMIMEType, mimeType! as NSString, nil)?.takeRetainedValue()
-        {
+    if mimeType != nil {
+        if let uti = UTTypeCreatePreferredIdentifierForTag(kUTTagClassMIMEType, mimeType! as NSString, nil)?.takeRetainedValue() {
             documentInteractionController.uti = uti as String
         }
     }
@@ -33,8 +32,7 @@ func doOpenFile(filePath: String, mimeType: String?) -> Bool {
 }
 
 class DocumentInteractionControllerDelegate: NSObject, UIDocumentInteractionControllerDelegate {
-    
-    func documentInteractionControllerViewControllerForPreview(_ controller: UIDocumentInteractionController) -> UIViewController {
+    func documentInteractionControllerViewControllerForPreview(_: UIDocumentInteractionController) -> UIViewController {
         return (UIApplication.shared.delegate?.window??.rootViewController)!
     }
 }

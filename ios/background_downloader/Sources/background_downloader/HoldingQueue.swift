@@ -23,20 +23,20 @@ import os.log
  * [taskForId] to get the task for a specific taskId
  */
 class HoldingQueue {
-    var maxConcurrent: Int = 1000000
-    var maxConcurrentByHost: Int = 1000000
-    var maxConcurrentByGroup: Int = 1000000
+    var maxConcurrent: Int = 1_000_000
+    var maxConcurrentByHost: Int = 1_000_000
+    var maxConcurrentByGroup: Int = 1_000_000
     var enqueuedTaskIds = [String]()
-    
+
     private var concurrent = 0
     private var concurrentByHost = [String: Int]()
     private var concurrentByGroup = [String: Int]()
-    
-    private var queue = [EnqueueItem]()  // Using an array as a substitute for a priority queue
-    
+
+    private var queue = [EnqueueItem]() // Using an array as a substitute for a priority queue
+
     let stateLock = AsyncLock()
-    private var job: DispatchWorkItem? = nil // for advanceQueue in future
-    
+    private var job: DispatchWorkItem? // for advanceQueue in future
+
     /**
      * Add [EnqueueItem] [item] to the queue and advance the queue if possible
      */
@@ -51,7 +51,7 @@ class HoldingQueue {
         advanceQueue()
         await stateLock.unlock()
     }
-    
+
     /**
      * Signals to the holdingQueue that a [task] has finished
      *
@@ -71,11 +71,11 @@ class HoldingQueue {
             enqueuedTaskIds.remove(at: index)
         }
         advanceQueue()
-        if (!reEntry) {
+        if !reEntry {
             await stateLock.unlock()
         }
     }
-    
+
     /**
      * Removes all [EnqueueItem] where their taskId is in [taskIds], sends a
      * [TaskStatus.canceled] update and returns a list of
@@ -85,15 +85,15 @@ class HoldingQueue {
      * requires the caller to acquire the [stateLock]
      */
     func cancelTasksWithIds(_ taskIds: [String]) -> [String] {
-        let toRemove = queue.filter( { taskIds.contains($0.task.taskId) } )
-        toRemove.forEach { item in
+        let toRemove = queue.filter { taskIds.contains($0.task.taskId) }
+        for item in toRemove {
             processStatusUpdate(task: item.task, status: .canceled)
             os_log("Canceled task with id %@", log: log, type: .info, item.task.taskId)
         }
-        queue.removeAll(where: { taskIds.contains($0.task.taskId)})
+        queue.removeAll(where: { taskIds.contains($0.task.taskId) })
         return toRemove.map { $0.task.taskId }
     }
-    
+
     /**
      * Cancel (delete) all [EnqueueItem] matching [group], send a
      * [TaskStatus.canceled] for each and return the number of items cancelled
@@ -102,10 +102,10 @@ class HoldingQueue {
      * requires the caller to acquire the [stateLock]
      */
     func cancelAllTasks(group: String) -> Int {
-        let taskIds = queue.filter({ $0.task.group == group }).map { $0.task.taskId }
+        let taskIds = queue.filter { $0.task.group == group }.map { $0.task.taskId }
         return cancelTasksWithIds(taskIds).count
     }
-    
+
     /**
      * Return task matching [taskId], or null
      *
@@ -113,13 +113,13 @@ class HoldingQueue {
      * requires the caller to acquire the [stateLock]
      */
     func taskForId(_ taskId: String) -> Task? {
-        let tasks = queue.filter( { $0.task.taskId == taskId } ).map { $0.task }
+        let tasks = queue.filter { $0.task.taskId == taskId }.map { $0.task }
         if !tasks.isEmpty {
             return tasks.first
         }
         return nil
     }
-    
+
     /**
      * Return list of [Task] for this [group]. If [group] is nil al tasks are returned
      *
@@ -127,9 +127,9 @@ class HoldingQueue {
      * requires the caller to acquire the [stateLock]
      */
     func allTasks(group: String?) -> [Task] {
-        return queue.filter( { group == nil || $0.task.group == group } ).map { $0.task }
+        return queue.filter { group == nil || $0.task.group == group }.map { $0.task }
     }
-    
+
     /**
      * Advance the queue by signalling the queue processing coroutine
      *
@@ -144,7 +144,7 @@ class HoldingQueue {
         }
         advanceQueueInFuture()
     }
-    
+
     private func advanceQueueInFuture() {
         job?.cancel()
         job = DispatchWorkItem {
@@ -155,9 +155,8 @@ class HoldingQueue {
         }
         guard let job = job else { return }
         DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 10, execute: job)
-        
     }
-    
+
     /// Processes one item in the queue, if possible
     private func processQueue() async {
         await stateLock.lock()
@@ -166,8 +165,9 @@ class HoldingQueue {
             while !queue.isEmpty {
                 let item = queue.removeFirst()
                 let host = getHost(item.task)
-                if concurrentByHost[host] ?? 0 < maxConcurrentByHost &&
-                    concurrentByGroup[item.task.group] ?? 0 < maxConcurrentByGroup {
+                if concurrentByHost[host] ?? 0 < maxConcurrentByHost,
+                   concurrentByGroup[item.task.group] ?? 0 < maxConcurrentByGroup
+                {
                     concurrent += 1
                     concurrentByHost[host, default: 0] += 1
                     concurrentByGroup[item.task.group, default: 0] += 1
@@ -182,7 +182,7 @@ class HoldingQueue {
         }
         await stateLock.unlock()
     }
-    
+
     /**
      * Calculates the [concurrent], [concurrentByHost] and [concurrentByGroup] values
      *
@@ -196,7 +196,7 @@ class HoldingQueue {
             await stateLock.unlock()
             return
         }
-        let tasks: [Task] = urlSessionTasks.filter({ $0.state != .completed }).map({ getTaskFrom(urlSessionTask: $0)}).filter({ $0 != nil}).map({ $0!})
+        let tasks: [Task] = urlSessionTasks.filter { $0.state != .completed }.map { getTaskFrom(urlSessionTask: $0) }.filter { $0 != nil }.map { $0! }
         concurrent = tasks.count
         concurrentByHost.removeAll()
         concurrentByGroup.removeAll()
@@ -209,29 +209,27 @@ class HoldingQueue {
     }
 }
 
-
-
 /**
  * Holds data related to enqueueing a task
  *
  * Used in the context of changing the RequireWiFi setting (where tasks need to be re-enqueued)
  * and in the context of the [HoldingQueue]
  */
-struct EnqueueItem : Comparable {
+struct EnqueueItem: Comparable {
     let task: Task
     let notificationConfigJsonString: String?
     let resumeDataAsBase64String: String
     let created = Date()
-    
+
     // Comparable implementation to sort based on task priority and creation time
     static func < (lhs: EnqueueItem, rhs: EnqueueItem) -> Bool {
         return lhs.task.priority == rhs.task.priority ? lhs.task.creationTime < rhs.task.creationTime : lhs.task.priority < rhs.task.priority
     }
-    
+
     static func == (lhs: EnqueueItem, rhs: EnqueueItem) -> Bool {
         return lhs.task.priority == rhs.task.priority && lhs.task.creationTime == rhs.task.creationTime
     }
-    
+
     func enqueue() async {
         let success = await BDPlugin.instance.doEnqueue(taskJsonString: jsonStringFor(task: task) ?? "", notificationConfigJsonString: notificationConfigJsonString, resumeDataAsBase64String: resumeDataAsBase64String)
         if !success {
@@ -247,14 +245,14 @@ struct EnqueueItem : Comparable {
 /// Traditional lock for asyn/await environment
 actor AsyncLock {
     private var isLocked = false
-    
+
     func lock() async {
         while isLocked {
             await _Concurrency.Task.yield()
         }
         isLocked = true
     }
-    
+
     func unlock() async {
         isLocked = false
     }

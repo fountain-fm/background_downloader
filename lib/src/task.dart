@@ -1370,6 +1370,7 @@ final class HlsDownloadTask extends DownloadTask {
     required super.retries,
     required super.allowPause,
     required super.directory,
+    required super.headers,
     required super.baseDirectory,
   }) : super(
           metaData: jsonEncode({

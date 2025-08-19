@@ -6,8 +6,8 @@
 //
 
 import Foundation
-import UniformTypeIdentifiers
 import os.log
+import UniformTypeIdentifiers
 
 extension URL {
     /// Uses .appending for iOS 16 and up, and .appendingPathComponent
@@ -19,12 +19,12 @@ extension URL {
             return appendingPathComponent(component, isDirectory: isDirectory)
         }
     }
-    
+
     /// Excludes URL from backup
     mutating func setCloudBackup(exclude: Bool) throws {
         var resource = URLResourceValues()
         resource.isExcludedFromBackup = exclude
-        try self.setResourceValues(resource)
+        try setResourceValues(resource)
     }
 }
 
@@ -32,21 +32,21 @@ extension URL {
 func validateUrl(_ task: Task) -> URL? {
     let url: URL?
     // encodingInvalidCharacters is only available when compiling with Xcode 15, which uses Swift version 5.9
-#if swift(>=5.9)
-    if #available(iOS 17.0, *) {
-        url = URL(string: task.url, encodingInvalidCharacters: false)
-    } else {
+    #if swift(>=5.9)
+        if #available(iOS 17.0, *) {
+            url = URL(string: task.url, encodingInvalidCharacters: false)
+        } else {
+            url = URL(string: task.url)
+        }
+    #else
         url = URL(string: task.url)
-    }
-#else
-    url = URL(string: task.url)
-#endif
+    #endif
     return url
 }
 
 /// Converts the [map] to a [String:String] map with lowercased keys
 func lowerCasedStringStringMap(_ map: [AnyHashable: Any]?) -> [String: String]? {
-    if map == nil {return nil}
+    if map == nil { return nil }
     var result: [String: String] = [:]
     for (key, value) in map! {
         if let stringKey = key as? String, let stringValue = value as? String {
@@ -63,11 +63,12 @@ func createTempFileWithRange(from fileURL: URL, start: UInt64, contentLength: UI
     let fileManager = FileManager.default
     let tempDir = fileManager.temporaryDirectory
     let tempFileURL = tempDir.appendingPathComponent(UUID().uuidString) // Create a unique temporary file
-    
+
     // Create the temporary file
     fileManager.createFile(atPath: tempFileURL.path, contents: nil, attributes: nil)
     guard let inputStream = InputStream(url: fileURL),
-          let outputStream = OutputStream(toFileAtPath: tempFileURL.path, append: false) else {
+          let outputStream = OutputStream(toFileAtPath: tempFileURL.path, append: false)
+    else {
         os_log("Cannot create input or output stream for partial upload temporary file creation", log: log, type: .error)
         return nil
     }
@@ -82,7 +83,7 @@ func createTempFileWithRange(from fileURL: URL, start: UInt64, contentLength: UI
     defer { buffer.deallocate() }
     var remainingBytes = contentLength
     var totalRead: UInt64 = 0
-    
+
     // Seek to the start position
     while totalRead < start {
         let seekBytes = min(chunkSize, Int(start - totalRead))
@@ -94,7 +95,7 @@ func createTempFileWithRange(from fileURL: URL, start: UInt64, contentLength: UI
         if bytesRead == 0 { break } // EOF
         totalRead += UInt64(bytesRead)
     }
-    
+
     // Read only the required range
     while remainingBytes > 0 {
         let bytesToRead = min(chunkSize, Int(remainingBytes))
@@ -110,7 +111,6 @@ func createTempFileWithRange(from fileURL: URL, start: UInt64, contentLength: UI
     return tempFileURL
 }
 
-
 /**
  Returns mimetype of a filename based on its extension, or application/octet-stream
  */
@@ -123,4 +123,3 @@ func getMimeType(fromFilename filename: String) -> String {
     // Default MIME type if unable to determine
     return "application/octet-stream"
 }
-

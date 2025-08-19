@@ -459,6 +459,7 @@ class _MyAppState extends State<MyApp> {
           quality: HlsQuality.q720,
           retries: 3,
           allowPause: true,
+          headers: {},
           baseDirectory: BaseDirectory.applicationSupport,
           directory: Directory.current.path,
           updates: Updates.statusAndProgress);

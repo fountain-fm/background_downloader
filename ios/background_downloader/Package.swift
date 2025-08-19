@@ -6,10 +6,10 @@ import PackageDescription
 let package = Package(
     name: "background_downloader",
     platforms: [
-        .iOS("14.0")
+        .iOS("14.0"),
     ],
     products: [
-        .library(name: "background-downloader", targets: ["background_downloader"])
+        .library(name: "background-downloader", targets: ["background_downloader"]),
     ],
     dependencies: [],
     targets: [
@@ -19,6 +19,6 @@ let package = Package(
             resources: [
                 .process("PrivacyInfo.xcprivacy"),
             ]
-        )
+        ),
     ]
 )

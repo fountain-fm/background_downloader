@@ -5,12 +5,11 @@
 //  Created by Bram on 10/26/24.
 //
 
-import Foundation
 import Flutter
+import Foundation
 import os.log
 
 import UIKit
-
 
 /// Invoke a callback in Dart (via the method channel) and return the returned Task value or nil
 private func invokeCallback(withMethod methodName: String, forTask task: Task) async -> Any? {
@@ -25,9 +24,8 @@ private func invokeCallback(withMethod methodName: String, forTask task: Task) a
                 return
             }
             if methodName == "beforeTaskStartCallback" {
-                continuation.resume(returning: try? JSONDecoder().decode(TaskStatusUpdate.self, from: (jsonString).data(using: .utf8)!))
-            }
-            else {
+                continuation.resume(returning: try? JSONDecoder().decode(TaskStatusUpdate.self, from: jsonString.data(using: .utf8)!))
+            } else {
                 continuation.resume(returning: taskFrom(jsonString: jsonString))
             }
         })
@@ -56,7 +54,7 @@ func invokeOnTaskFinishedCallback(taskStatusUpdate: TaskStatusUpdate) async -> B
             if let error = result as? FlutterError {
                 os_log("Error invoking onTaskFinishedCallback: %@", log: log, type: .error, error.message ?? "nil")
                 continuation.resume(returning: false)
-            }  else {
+            } else {
                 continuation.resume(returning: true)
             }
         })

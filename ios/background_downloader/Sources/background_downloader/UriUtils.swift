@@ -6,31 +6,30 @@
 //
 
 import Flutter
+import MobileCoreServices
+import os.log
+import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
-import MobileCoreServices
-import PhotosUI
-import os.log
-
-
 
 public class UriUtilsMethodCallHelper: NSObject,
-                                       FlutterPlugin,
-                                       UIDocumentPickerDelegate,
-                                       PHPickerViewControllerDelegate {
+    FlutterPlugin,
+    UIDocumentPickerDelegate,
+    PHPickerViewControllerDelegate
+{
     private var flutterResult: FlutterResult?
     private var persistedUriPermission: Bool = false
     private var multipleAllowed: Bool = false
     private var allowVideos = false
     private var localFileUrls: [String] = [] // for media picker
     private var accessedSecurityScopedUrls: Set<URL> = Set()
-    
+
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: "com.bbflight.background_downloader.uriutils", binaryMessenger: registrar.messenger())
         let instance = UriUtilsMethodCallHelper()
         registrar.addMethodCallDelegate(instance, channel: channel)
     }
-    
+
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
         case "pickDirectory":
@@ -55,36 +54,39 @@ public class UriUtilsMethodCallHelper: NSObject,
             result(FlutterMethodNotImplemented)
         }
     }
-    
+
     private func pickDirectory(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let args = call.arguments as? [Any],
-              let persistedUriPermission = args[2] as? Bool else {
+              let persistedUriPermission = args[2] as? Bool
+        else {
             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments for pickDirectory", details: nil))
             return
         }
-        
+
         self.persistedUriPermission = persistedUriPermission
-        self.flutterResult = result
-        
+        flutterResult = result
+
         var startLocation: URL? = nil
-        
+
         if let startLocationUriString = args[1] as? String,
-           let startLocationUri = decodeToFileUrl(uriString: startLocationUriString) {
+           let startLocationUri = decodeToFileUrl(uriString: startLocationUriString)
+        {
             startLocation = startLocationUri
         } else if let startLocationOrdinal = args[0] as? Int,
-                  let sharedStorage = SharedStorage(rawValue: startLocationOrdinal) {
+                  let sharedStorage = SharedStorage(rawValue: startLocationOrdinal)
+        {
             startLocation = getInitialDirectoryUrl(location: sharedStorage)
         }
-        
+
         let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.folder], asCopy: false)
         documentPicker.delegate = self
         documentPicker.allowsMultipleSelection = false
-        
+
         // Set the initial directory if available
         if #available(iOS 14.0, *), let startLocation = startLocation {
             documentPicker.directoryURL = startLocation
         }
-        
+
         // Present the document picker
         if let rootViewController = UIApplication.shared.keyWindow?.rootViewController {
             rootViewController.present(documentPicker, animated: true, completion: nil)
@@ -92,34 +94,36 @@ public class UriUtilsMethodCallHelper: NSObject,
             completeFlutterResult(FlutterError(code: "NO_ROOT_VIEW_CONTROLLER", message: "Could not find root view controller", details: nil))
         }
     }
-    
-    
+
     private func pickFiles(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let args = call.arguments as? [Any],
               let multipleAllowed = args[3] as? Bool,
-              let persistedUriPermission = args[4] as? Bool else {
+              let persistedUriPermission = args[4] as? Bool
+        else {
             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments for pickFiles", details: nil))
             return
         }
-        
+
         self.persistedUriPermission = persistedUriPermission
         self.multipleAllowed = multipleAllowed
-        self.flutterResult = result
-        
+        flutterResult = result
+
         var startLocation: URL? = nil
-        
+
         if let startLocationUriString = args[1] as? String,
-           let startLocationUri = decodeToFileUrl(uriString: startLocationUriString) {
+           let startLocationUri = decodeToFileUrl(uriString: startLocationUriString)
+        {
             startLocation = startLocationUri
         } else if let startLocationOrdinal = args[0] as? Int,
-                  let sharedStorage = SharedStorage(rawValue: startLocationOrdinal) {
+                  let sharedStorage = SharedStorage(rawValue: startLocationOrdinal)
+        {
             if sharedStorage == .images || sharedStorage == .video {
                 pickMedia(startLocation: sharedStorage)
                 return
             }
             startLocation = getInitialDirectoryUrl(location: sharedStorage)
         }
-        
+
         // Convert allowed extensions to UTTypes
         var allowedContentTypes: [UTType] = []
         if let allowedExtensions = args[2] as? [String] {
@@ -130,18 +134,18 @@ public class UriUtilsMethodCallHelper: NSObject,
             }
         }
         if allowedContentTypes.isEmpty {
-            allowedContentTypes = [UTType.item]  // Allow all types if no valid extensions are provided
+            allowedContentTypes = [UTType.item] // Allow all types if no valid extensions are provided
         }
-        
+
         let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: allowedContentTypes, asCopy: false)
         documentPicker.delegate = self
         documentPicker.allowsMultipleSelection = multipleAllowed
-        
+
         // Set the initial directory if available
         if let startLocation = startLocation {
             documentPicker.directoryURL = startLocation
         }
-        
+
         // Present the document picker
         if let rootViewController = UIApplication.shared.keyWindow?.rootViewController {
             rootViewController.present(documentPicker, animated: true, completion: nil)
@@ -149,7 +153,7 @@ public class UriUtilsMethodCallHelper: NSObject,
             completeFlutterResult(FlutterError(code: "NO_ROOT_VIEW_CONTROLLER", message: "Could not find root view controller", details: nil))
         }
     }
-    
+
     /**
      * Launches the photo picker to select one or more media files (images or videos).
      *
@@ -164,18 +168,17 @@ public class UriUtilsMethodCallHelper: NSObject,
     private func pickMedia(startLocation: SharedStorage) {
         var configuration = PHPickerConfiguration()
         configuration.filter = startLocation == .images ? .images : .videos
-        configuration.selectionLimit = multipleAllowed ? 0 : 1  // 0 means unlimited
+        configuration.selectionLimit = multipleAllowed ? 0 : 1 // 0 means unlimited
         let pickerViewController = PHPickerViewController(configuration: configuration)
         pickerViewController.delegate = self
-        
+
         if let rootViewController = UIApplication.shared.keyWindow?.rootViewController {
             rootViewController.present(pickerViewController, animated: true, completion: nil)
         } else {
             completeFlutterResult(FlutterError(code: "NO_ROOT_VIEW_CONTROLLER", message: "Could not find root view controller", details: nil))
         }
     }
-    
-    
+
     /**
      * Creates a new directory at the specified path within the given parent directory URI.
      * The parent directory URI must be resolvable to a file:// URI.  Supports creating intermediate directories.
@@ -197,20 +200,20 @@ public class UriUtilsMethodCallHelper: NSObject,
             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid arguments for createDirectory", details: nil))
             return
         }
-        
+
         do {
             let newDirectoryURL = parentDirectoryUri.appendingPathComponent(newDirectoryName, isDirectory: true)
-            
+
             // Ensure we have access to the parent directory before attempting to create a subdirectory.
             if !parentDirectoryUri.startAccessingSecurityScopedResource() {
                 result(FlutterError(code: "ACCESS_DENIED", message: "Failed to access parent directory: \(parentDirectoryUri)", details: nil))
                 return
             }
             accessedSecurityScopedUrls.insert(parentDirectoryUri)
-            
+
             // Create the directory
             try FileManager.default.createDirectory(at: newDirectoryURL, withIntermediateDirectories: true, attributes: nil)
-            
+
             // If persistence is requested, we will also need to stop accessing and deallocate the URL when done.
             if persistedUriPermission {
                 accessedSecurityScopedUrls.insert(newDirectoryURL)
@@ -221,12 +224,12 @@ public class UriUtilsMethodCallHelper: NSObject,
                 // Return the regular file URI
                 result(newDirectoryURL.absoluteString)
             }
-            
+
         } catch {
             result(FlutterError(code: "CREATE_DIRECTORY_FAILED", message: "Failed to create directory: \(error.localizedDescription)", details: nil))
         }
     }
-    
+
     /**
      * Activates a previously accessed directory or file (represented by a URI string)
      * by calling `startAccessingSecurityScopedResource`.  This is necessary on iOS
@@ -256,7 +259,7 @@ public class UriUtilsMethodCallHelper: NSObject,
         accessedSecurityScopedUrls.insert(uri)
         result(uri.absoluteString)
     }
-    
+
     /**
      * Retrieves the file data (bytes) for a given URI string.
      *
@@ -269,11 +272,12 @@ public class UriUtilsMethodCallHelper: NSObject,
      */
     private func getFileBytes(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let uriString = call.arguments as? String,
-              let fileUrl = decodeToFileUrl(uriString: uriString) else {
+              let fileUrl = decodeToFileUrl(uriString: uriString)
+        else {
             result(FlutterError(code: "INVALID_URI", message: "Invalid or unresolvable URI: \(call.arguments)", details: nil))
             return
         }
-        
+
         // If this is a bookmark URI, we need to start accessing the security-scoped resource.
         if uriString.starts(with: "urlbookmark://") {
             if !fileUrl.startAccessingSecurityScopedResource() {
@@ -282,7 +286,7 @@ public class UriUtilsMethodCallHelper: NSObject,
             }
             accessedSecurityScopedUrls.insert(fileUrl)
         }
-        
+
         do {
             let fileData = try Data(contentsOf: fileUrl)
             result(FlutterStandardTypedData(bytes: fileData))
@@ -290,7 +294,7 @@ public class UriUtilsMethodCallHelper: NSObject,
             result(FlutterError(code: "FILE_READ_ERROR", message: "Failed to read file data: \(error.localizedDescription)", details: nil))
         }
     }
-    
+
     /**
      * Copies the file at the given source URI to the destination URI.
      * Both the source and destination URIs must be resolvable to file:// URIs.
@@ -325,7 +329,7 @@ public class UriUtilsMethodCallHelper: NSObject,
             result(FlutterError(code: "COPY_FAILED", message: "Failed to copy file: \(error.localizedDescription)", details: nil))
         }
     }
-    
+
     /**
      * Moves the file at the given source URI to the destination URI.
      * Both the source and destination URIs must be resolvable to file:// URIs.
@@ -360,7 +364,7 @@ public class UriUtilsMethodCallHelper: NSObject,
             result(FlutterError(code: "MOVE_FAILED", message: "Failed to move file: \(error.localizedDescription)", details: nil))
         }
     }
-    
+
     /**
      * Deletes the file at the given URI. The URI must be resolvable to a file:// URI.
      *
@@ -373,7 +377,8 @@ public class UriUtilsMethodCallHelper: NSObject,
     private func deleteFile(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         guard let uriString = call.arguments as? String,
               let fileUrl = decodeToFileUrl(uriString: uriString),
-              fileUrl.scheme == "file" else {
+              fileUrl.scheme == "file"
+        else {
             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Invalid or non-file URI provided for deleteFile", details: nil))
             return
         }
@@ -384,7 +389,7 @@ public class UriUtilsMethodCallHelper: NSObject,
             result(FlutterError(code: "DELETE_FILE_FAILED", message: "Failed to delete file: \(error.localizedDescription)", details: nil))
         }
     }
-    
+
     /**
      * Opens the file at the given URI using the system's default application for the file type.
      *
@@ -412,22 +417,21 @@ public class UriUtilsMethodCallHelper: NSObject,
         }
         result(doOpenFile(filePath: filePath, mimeType: mimeType != nil ? mimeType : getMimeType(fromFilename: filePath)))
     }
-    
+
     /**
      * Complete the flutter result callback and destroy the result object
      */
     private func completeFlutterResult(_ result: Any?) {
-        self.flutterResult?(result)
-        self.flutterResult = nil
+        flutterResult?(result)
+        flutterResult = nil
     }
-    
+
     // MARK: - UIDocumentPickerDelegate
-    
-    public func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        
+
+    public func documentPicker(_: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         if multipleAllowed {
             var resultUrls: [String] = []
-            
+
             for url in urls {
                 // Start accessing the security-scoped resource.
                 if !url.startAccessingSecurityScopedResource() {
@@ -436,7 +440,7 @@ public class UriUtilsMethodCallHelper: NSObject,
                     continue
                 }
                 accessedSecurityScopedUrls.insert(url)
-                
+
                 let pickedUrl: URL
                 if persistedUriPermission {
                     do {
@@ -448,10 +452,10 @@ public class UriUtilsMethodCallHelper: NSObject,
                 } else {
                     pickedUrl = url
                 }
-                
+
                 resultUrls.append(pickedUrl.absoluteString)
             }
-            
+
             completeFlutterResult(resultUrls)
         } else {
             // Single selection
@@ -459,14 +463,14 @@ public class UriUtilsMethodCallHelper: NSObject,
                 completeFlutterResult(nil) // User cancelled
                 return
             }
-            
+
             // Start accessing the security-scoped resource.
             if !url.startAccessingSecurityScopedResource() {
                 completeFlutterResult(FlutterError(code: "ACCESS_DENIED", message: "Failed to access security-scoped resource: \(url)", details: nil))
                 return
             }
             accessedSecurityScopedUrls.insert(url)
-            
+
             let pickedUrl: URL
             if persistedUriPermission {
                 do {
@@ -481,16 +485,13 @@ public class UriUtilsMethodCallHelper: NSObject,
             completeFlutterResult(pickedUrl.absoluteString)
         }
     }
-    
-    
-    
-    public func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+
+    public func documentPickerWasCancelled(_: UIDocumentPickerViewController) {
         completeFlutterResult(nil)
     }
-    
-    
+
     // MARK: PHickerViewControllerelegate
-    
+
     public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         guard !results.isEmpty else {
             completeFlutterResult(nil)
@@ -500,14 +501,14 @@ public class UriUtilsMethodCallHelper: NSObject,
         for result in results {
             group.enter()
             let itemProvider = result.itemProvider
-            
+
             // Determine the preferred order based on what is allowed
             var typeIdentifiers: [String] = []
             if allowVideos {
                 typeIdentifiers.append(UTType.movie.identifier)
             }
             typeIdentifiers.append(UTType.image.identifier)
-            
+
             var handled = false
             for typeIdentifier in typeIdentifiers {
                 if itemProvider.hasRepresentationConforming(toTypeIdentifier: typeIdentifier) {
@@ -516,7 +517,7 @@ public class UriUtilsMethodCallHelper: NSObject,
                     break // Break after handling the first matching type
                 }
             }
-            
+
             // Leave the group if no suitable representation was found
             if !handled {
                 group.leave()
@@ -532,7 +533,7 @@ public class UriUtilsMethodCallHelper: NSObject,
             }
         }
     }
-    
+
     /// Handles the loading of a file representation from an `NSItemProvider`.
     ///
     /// This function attempts to load a file of the specified `typeIdentifier` from the given `itemProvider`.
@@ -559,7 +560,7 @@ public class UriUtilsMethodCallHelper: NSObject,
             group.leave()
         }
     }
-    
+
     /// Copies a file from the provided URL into the app's temporary storage directory, returning the new URL relative to the storage root. This URL will have the "support" scheme and
     /// itspath is the last pathsegment of the file URL. It will be converted to a proper file:// URL using `decodeToFileUrl`
     ///
@@ -574,14 +575,14 @@ public class UriUtilsMethodCallHelper: NSObject,
     ///            You can reconstruct the full URL using `constructPersistentFileURL(for:)`.
     private func copyFileToLocalStorage(url: URL) -> URL? {
         let fileManager = FileManager.default
-        
+
         // Use the Application Support directory, which is private to the app but persistent.
         // Create a custom subdirectory for temporary files.
         guard let storageDirectory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("com.bbflight.downloader.media", isDirectory: true) else {
             completeFlutterResult(FlutterError(code: "PICK_FAILED", message: "Could not find Application Support directory", details: nil))
             return nil
         }
-        
+
         // Ensure the storage directory exists
         do {
             try fileManager.createDirectory(at: storageDirectory, withIntermediateDirectories: true, attributes: nil)
@@ -589,17 +590,17 @@ public class UriUtilsMethodCallHelper: NSObject,
             completeFlutterResult(FlutterError(code: "PICK_FAILED", message: "Error creating storage directory: \(error)", details: nil))
             return nil
         }
-        
+
         // Create a unique filename
         let uniqueFilename = "\(UUID().uuidString).\(url.pathExtension)"
         let destinationURL = storageDirectory.appendingPathComponent(uniqueFilename)
-        
+
         do {
             // If a file with the same name already exists, remove it. This should not normally happen because of the UUID, but it's good practice.
             if fileManager.fileExists(atPath: destinationURL.path) {
                 try fileManager.removeItem(at: destinationURL)
             }
-            
+
             // Copy the file from source to destination, and return the media URI to this location
             try fileManager.copyItem(at: url, to: destinationURL)
             return URL(string: "media://support/\(destinationURL.lastPathComponent)")
@@ -608,10 +609,9 @@ public class UriUtilsMethodCallHelper: NSObject,
             return nil
         }
     }
-    
-    
+
     // MARK: - Helper Functions
-    
+
     private func getInitialDirectoryUrl(location: SharedStorage) -> URL? {
         switch location {
         case SharedStorage.downloads:
@@ -628,7 +628,7 @@ public class UriUtilsMethodCallHelper: NSObject,
             return nil
         }
     }
-    
+
     // Stop accessing security-scoped resources when appropriate.
     deinit {
         // Iterate through all stored URLs and stop accessing the security-scoped resources.
@@ -637,7 +637,6 @@ public class UriUtilsMethodCallHelper: NSObject,
         }
     }
 }
-
 
 /// Packs `filename` and `uri` into a single String
 ///
@@ -651,16 +650,16 @@ func pack(filename: String, uri: URL) -> String {
 /// if it is a Uri as (nil, the uri)
 func unpack(packedString: String) -> (filename: String?, uri: URL?) {
     let regex = try! NSRegularExpression(pattern: ":::([\\s\\S]*?)::::::([\\s\\S]*?):::")
-    let range = NSRange(packedString.startIndex..<packedString.endIndex, in: packedString)
-    
+    let range = NSRange(packedString.startIndex ..< packedString.endIndex, in: packedString)
+
     if let match = regex.firstMatch(in: packedString, range: range) {
         let filenameRange = match.range(at: 1)
         let uriStringRange = match.range(at: 2)
-        
-        if filenameRange.location != NSNotFound && uriStringRange.location != NSNotFound {
+
+        if filenameRange.location != NSNotFound, uriStringRange.location != NSNotFound {
             let filename = String(packedString[Range(filenameRange, in: packedString)!])
             let uriString = String(packedString[Range(uriStringRange, in: packedString)!])
-            
+
             if let uri = URL(string: uriString), uri.scheme != nil {
                 return (filename: filename, uri: uri)
             } else {
@@ -726,12 +725,12 @@ private func decodeToFileUrl(uriString: String) -> URL? {
         do {
             var isStale = false
             let resolvedUrl = try URL(resolvingBookmarkData: bookmarkData, options: .withoutUI, relativeTo: nil, bookmarkDataIsStale: &isStale)
-            
+
             if isStale {
                 os_log("Warning: Bookmark data is stale for %@", log: log, type: .info, resolvedUrl.absoluteString)
                 return nil
             }
-            
+
             // Access to resolved URLs that are not persisted, is started when they are actually used
             // (i.e. when creating a subdirectory in it, or picking it)
             // And stopped in the deinit
@@ -754,7 +753,7 @@ private func decodeToFileUrl(uriString: String) -> URL? {
 
 /**
  Returns a file URI, or nil if not possible.
- 
+
  Decodes a bookmark URI or a media scheme uri
  */
 func decodeToFileUrl(uri: URL) -> URL? {
