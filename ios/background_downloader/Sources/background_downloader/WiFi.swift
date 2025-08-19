@@ -11,9 +11,9 @@ import os.log
 /// WiFi requirement modes at the application level
 enum RequireWiFi: Int {
     case
-    asSetByTask,
-    forAllTasks,
-    forNoTasks
+        asSetByTask,
+        forAllTasks,
+        forNoTasks
 }
 
 /// Manages changes to WiFi requirement, by re-enqueuing tasks if needed
@@ -25,7 +25,7 @@ class WiFiQueue {
 
     // Private initializer to prevent creating new instances
     private init() {}
-    
+
     // Change the application level WiFi requirement and re-enqueue tasks as necessary
     func requireWiFiChange(requireWiFi: RequireWiFi, rescheduleRunningTasks: Bool) {
         requireWiFiChangeQueue.async {
@@ -40,10 +40,10 @@ class WiFiQueue {
                     return
                 }
                 var haveReEnqueued = false
-                urlSessionTasks.forEach { urlSessionTask in
-                    if (urlSessionTask is URLSessionDownloadTask && (urlSessionTask.state == .running || urlSessionTask.state == .suspended)) {
+                for urlSessionTask in urlSessionTasks {
+                    if urlSessionTask is URLSessionDownloadTask && (urlSessionTask.state == .running || urlSessionTask.state == .suspended) {
                         guard let task = getTaskFrom(urlSessionTask: urlSessionTask) else {
-                            return
+                            continue
                         }
                         BDPlugin.propertyLock.withLock {
                             if taskRequiresWiFi(task: task) != BDPlugin.taskIdsRequiringWiFi.contains(task.taskId) {
@@ -63,7 +63,7 @@ class WiFiQueue {
                                         // already running, so pause instead of cancel
                                         haveReEnqueued = true
                                         BDPlugin.tasksToReEnqueue.insert(task)
-                                        _Concurrency.Task{
+                                        _Concurrency.Task {
                                             await (urlSessionTask as! URLSessionDownloadTask).cancelByProducingResumeData()
                                         }
                                     }
@@ -79,12 +79,11 @@ class WiFiQueue {
             self.requireWiFiChangeSemaphore.wait() // wait for re-enqueues to complete
         }
     }
-    
+
     func reEnqueuesDone() {
-        self.requireWiFiChangeSemaphore.signal()
+        requireWiFiChangeSemaphore.signal()
     }
-    
-    
+
     /// Re-enqueue this task and associated data. Nil signals end of batch
     func reEnqueue(_ enqueueItem: EnqueueItem?) {
         reEnqueueQueue.async {

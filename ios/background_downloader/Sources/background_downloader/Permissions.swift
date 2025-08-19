@@ -6,9 +6,9 @@
 //
 
 import Foundation
+import os.log
 import Photos
 import UserNotifications
-import os.log
 
 public enum PermissionType: Int {
     case notifications,
@@ -22,68 +22,69 @@ public enum PermissionStatus: Int {
          denied,
          granted,
          partial,
-         requestError }
+         requestError
+}
 
 /// Get current permission status for this [request]
 ///
 /// Unknown permissions resturn .granted
 public func getPermissionStatus(for permissionType: PermissionType) async -> PermissionStatus {
     if permissionType == .notifications {
-#if BYPASS_PERMISSION_NOTIFICATIONS
-        return .denied
-#else
-        let center = UNUserNotificationCenter.current()
-        let status = (await center.notificationSettings()).authorizationStatus
-        switch status {
+        #if BYPASS_PERMISSION_NOTIFICATIONS
+            return .denied
+        #else
+            let center = UNUserNotificationCenter.current()
+            let status = (await center.notificationSettings()).authorizationStatus
+            switch status {
             case .authorized:
                 return .granted
-                
+
             case .denied:
                 return .denied
-                
+
             case .notDetermined:
                 return .undetermined
-                
+
             default:
                 return .partial
-        }
-#endif
+            }
+        #endif
     }
-    if (permissionType == .iosAddToPhotoLibrary || permissionType == .iosChangePhotoLibrary) {
+    if permissionType == .iosAddToPhotoLibrary || permissionType == .iosChangePhotoLibrary {
         let status: PHAuthorizationStatus
         if permissionType == .iosAddToPhotoLibrary {
-#if BYPASS_PERMISSION_IOSADDTOPHOTOLIBRARY
-            status = .denied
-#else
-            if #available(iOS 14, *) {
-                status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
-            } else {
-                status = PHPhotoLibrary.authorizationStatus()
-            }
-#endif
+            #if BYPASS_PERMISSION_IOSADDTOPHOTOLIBRARY
+                status = .denied
+            #else
+                if #available(iOS 14, *) {
+                    status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+                } else {
+                    status = PHPhotoLibrary.authorizationStatus()
+                }
+            #endif
         } else { // readwrite
-#if BYPASS_PERMISSION_IOSCHANGEPHOTOLIBRARY
-            status = .denied
-#else
-            if #available(iOS 14, *) {
-                status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-            } else {
-                status = PHPhotoLibrary.authorizationStatus()
-            }
-#endif
+            #if BYPASS_PERMISSION_IOSCHANGEPHOTOLIBRARY
+                status = .denied
+            #else
+                if #available(iOS 14, *) {
+                    status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+                } else {
+                    status = PHPhotoLibrary.authorizationStatus()
+                }
+            #endif
         }
         switch status {
-            case .authorized:
-                return .granted
-                
-            case .denied:
-                return .denied
-                
-            case .notDetermined:
-                return .undetermined
-                
-            default:
-                return .partial
+        case .authorized:
+            return .granted
+
+        case .denied:
+            return .denied
+
+        case .notDetermined:
+            return .undetermined
+
+        default:
+            return .partial
         }
     }
     return .granted // default return if irrelevant permission for iOS
@@ -94,61 +95,60 @@ public func getPermissionStatus(for permissionType: PermissionType) async -> Per
 /// Unknown permissions are granted
 public func requestPermission(for permissionType: PermissionType) async -> PermissionStatus {
     if permissionType == .notifications {
-#if BYPASS_PERMISSION_NOTIFICATIONS
-        return .denied
-#else
-        let center = UNUserNotificationCenter.current()
-        guard let granted = try? await center.requestAuthorization(options: [.alert]) else {
-            return .requestError
-        }
-        return granted ? .granted : .denied
-#endif
+        #if BYPASS_PERMISSION_NOTIFICATIONS
+            return .denied
+        #else
+            let center = UNUserNotificationCenter.current()
+            guard let granted = try? await center.requestAuthorization(options: [.alert]) else {
+                return .requestError
+            }
+            return granted ? .granted : .denied
+        #endif
     }
-    if (permissionType == .iosAddToPhotoLibrary || permissionType == .iosChangePhotoLibrary) {
+    if permissionType == .iosAddToPhotoLibrary || permissionType == .iosChangePhotoLibrary {
         let status: PHAuthorizationStatus
         if permissionType == .iosAddToPhotoLibrary {
-#if BYPASS_PERMISSION_IOSADDTOPHOTOLIBRARY
-            status = .denied
-#else
-            if #available(iOS 14, *) {
-                status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-            } else {
-                status = await withCheckedContinuation { continuation in
-                    PHPhotoLibrary.requestAuthorization {status in
-                        continuation.resume(returning: status)
+            #if BYPASS_PERMISSION_IOSADDTOPHOTOLIBRARY
+                status = .denied
+            #else
+                if #available(iOS 14, *) {
+                    status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+                } else {
+                    status = await withCheckedContinuation { continuation in
+                        PHPhotoLibrary.requestAuthorization { status in
+                            continuation.resume(returning: status)
+                        }
                     }
                 }
-            }
-#endif
+            #endif
         } else { // readwrite
-#if BYPASS_PERMISSION_IOSCHANGEPHOTOLIBRARY
-            status = .denied
-#else
-            if #available(iOS 14, *) {
-                status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
-            } else {
-                status = await withCheckedContinuation { continuation in
-                    PHPhotoLibrary.requestAuthorization {status in
-                        continuation.resume(returning: status)
+            #if BYPASS_PERMISSION_IOSCHANGEPHOTOLIBRARY
+                status = .denied
+            #else
+                if #available(iOS 14, *) {
+                    status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+                } else {
+                    status = await withCheckedContinuation { continuation in
+                        PHPhotoLibrary.requestAuthorization { status in
+                            continuation.resume(returning: status)
+                        }
                     }
                 }
-            }
-#endif
+            #endif
         }
         switch status {
-            case .authorized:
-                return .granted
-                
-            case .denied:
-                return .denied
-                
-            case .notDetermined:
-                return .undetermined
-                
-            default:
-                return .partial
+        case .authorized:
+            return .granted
+
+        case .denied:
+            return .denied
+
+        case .notDetermined:
+            return .undetermined
+
+        default:
+            return .partial
         }
     }
     return .granted
-    
 }

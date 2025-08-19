@@ -5,11 +5,10 @@
 //  Created by Bram on 1/24/25.
 //
 
-import XCTest
 @testable import background_downloader // Assuming your package is named 'background_downloader'
+import XCTest
 
 class UriUtilsTests: XCTestCase {
-
     func testPackShouldPackFilenameAndUriIntoASingleString() {
         let filename = "myFile.txt"
         let uri = URL(string: "content://com.example.app/document/123")!
@@ -84,7 +83,7 @@ class UriUtilsTests: XCTestCase {
 
         XCTAssertNil(resultUri)
     }
-    
+
     func testContainsUriReturnsTrueForValidUriString() {
         let uriString = "https://www.example.com"
         XCTAssertTrue(containsUri(maybePacked: uriString))

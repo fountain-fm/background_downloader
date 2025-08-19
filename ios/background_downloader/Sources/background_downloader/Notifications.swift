@@ -6,22 +6,21 @@
 //
 
 import Foundation
-import UIKit
 import os.log
-
+import UIKit
 
 /// NotificationContents
-struct NotificationContents : Codable {
+struct NotificationContents: Codable {
     let title: String
     let body: String
-    
-    init(json: [String:Any]) {
+
+    init(json: [String: Any]) {
         title = json["title"] as? String ?? ""
         body = json["body"] as? String ?? ""
     }
 }
 
-struct NotificationConfig : Codable {
+struct NotificationConfig: Codable {
     let running: NotificationContents?
     let complete: NotificationContents?
     let error: NotificationContents?
@@ -32,7 +31,7 @@ struct NotificationConfig : Codable {
     let groupNotificationId: String
 }
 
-enum NotificationType : Int {
+enum NotificationType: Int {
     case running,
          complete,
          error,
@@ -42,103 +41,85 @@ enum NotificationType : Int {
 
 /// Data and methods related to a notification for a group of tasks
 actor GroupNotification {
-    static var notifications: [String : GroupNotification] = [:]
+    static var notifications: [String: GroupNotification] = [:]
 
     let name: String
     let notificationConfig: NotificationConfig
-    
-    private var notifications: [Task : NotificationType]
-    
+
+    private var notifications: [Task: NotificationType]
+
     init(name: String, notificationConfig: NotificationConfig) {
         self.name = name
         self.notificationConfig = notificationConfig
-        self.notifications = [:]
+        notifications = [:]
     }
-    
+
     /// NotificationId derived from group name
     var notificationId: String {
-        get {
-            return "groupNotification:\(name)"
-        }
+        return "groupNotification:\(name)"
     }
-    
+
     /// Total number of notifications in this group
     var numTotal: Int {
-        get {
-            return notifications.count
-        }
+        return notifications.count
     }
-    
+
     /// Progress expressed as [numFinished]/[numTotal], except
     /// return 2.0 if numTotal is 0, to suggest that progress
     /// is undetermined
     var progress: Double {
-        get {
-            if numTotal == 0 {
-                return 2.0
-            } else {
-                return Double(numFinished) / Double(numTotal)
-            }
+        if numTotal == 0 {
+            return 2.0
+        } else {
+            return Double(numFinished) / Double(numTotal)
         }
     }
-    
+
     /// Number of "finished" notifications in this group.
     ///
     /// A "finished" notification is one that is not .running,
     /// so includes .complete, .error, .paused
     ///
     var numFinished: Int {
-        get {
-            return notifications.filter { (_, v) in v != NotificationType.running }.count
-        }
+        return notifications.filter { _, v in v != NotificationType.running }.count
     }
-    
+
     /// Number of "failed" notifications in this group.
     ///
     /// A "failed" notification is one of type .error
     ///
     var numFailed: Int {
-        get {
-            return notifications.filter { (_, v) in v == NotificationType.error }.count
-        }
+        return notifications.filter { _, v in v == NotificationType.error }.count
     }
-    
+
     /// True if all tasks finished, regardless of outcome
     var isFinished: Bool {
-        get {
-            return numFinished == numTotal
-        }
+        return numFinished == numTotal
     }
-    
+
     ///
     /// Return true if this group has an error
     ///
     var hasError: Bool {
-        get {
-            return numFailed > 0
-        }
+        return numFailed > 0
     }
-    
+
     /// Returns a Set of running tasks in this notificationGroup
     var runningTasks: Set<Task> {
-        get {
-            return Set(notifications.filter { (_, notificationType) in
-                notificationType == NotificationType.running
-            }.keys)
-        }
+        return Set(notifications.filter { _, notificationType in
+            notificationType == NotificationType.running
+        }.keys)
     }
-    
+
     /// Int representing this group's state. If this number
     /// does not change, the group state did not change.
     ///
     /// State is determined by the number of finished notifications
     /// and the number of total notifications
     private var groupState: Int {
-        get {
-            return 1000 * numTotal + numFinished
-        }
+        return 1000 * numTotal + numFinished
     }
-    
+
     /// Update a [task] and [notificationType] to this group,
     /// and return True if this led to change in [groupState]
     func update(task: Task, notificationType: NotificationType) -> Bool {
@@ -151,14 +132,13 @@ actor GroupNotification {
     }
 }
 
-
-enum NotificationCategory : String, CaseIterable {
-    case runningWithPause = "running_with_pause";
-    case runningWithoutPause = "running_without_pause";
-    case paused = "paused"
-    case complete = "complete"
-    case error = "error"
-    case canceled = "canceled"
+enum NotificationCategory: String, CaseIterable {
+    case runningWithPause = "running_with_pause"
+    case runningWithoutPause = "running_without_pause"
+    case paused
+    case complete
+    case error
+    case canceled
 }
 
 /// List of all category identifiers
@@ -199,7 +179,7 @@ func updateNotification(task: Task, notificationType: NotificationType, notifica
             content.userInfo = [
                 "task": jsonStringFor(task: task) ?? "",
                 "notificationConfig": jsonStringFor(notificationConfig: notificationConfig!) ?? "",
-                "notificationType": notificationType.rawValue
+                "notificationType": notificationType.rawValue,
             ]
             addNotificationActions(task: task, notificationType: notificationType, content: content, notificationConfig: notificationConfig!)
             let request = UNNotificationRequest(identifier: task.taskId,
@@ -215,7 +195,6 @@ func updateNotification(task: Task, notificationType: NotificationType, notifica
         }
     }
 }
-
 
 /**
  * Update notification for this [taskWorker] in group
@@ -248,8 +227,7 @@ private func updateGroupNotification(
         } else {
             notification = groupNotification.notificationConfig.running
         }
-        guard let notification = notification else
-        {
+        guard let notification = notification else {
             // remove notification
             notificationCenter.removeDeliveredNotifications(withIdentifiers: [task.taskId])
             return
@@ -261,11 +239,10 @@ private func updateGroupNotification(
         // check if the notification title or body have changed relative to what may
         // already be delivered, to avoid flashing notifications without change
         let existingNotifications = await notificationCenter.deliveredNotifications()
-        let previousNotification = existingNotifications.filter { 
+        let previousNotification = existingNotifications.filter {
             $0.request.identifier == groupNotificationId
         }
-        if previousNotification.isEmpty || previousNotification.first?.request.content.title != content.title || previousNotification.first?.request.content.body != content.body
-        {
+        if previousNotification.isEmpty || previousNotification.first?.request.content.title != content.title || previousNotification.first?.request.content.body != content.body {
             if !isFinished {
                 addCancelActionToNotificationGroup(content: content)
             }
@@ -287,7 +264,6 @@ private func updateGroupNotification(
     }
 }
 
-
 /// Register that [task] was enqueued, with [success] or failure
 ///
 /// This is only relevant for tasks that are part of a group notification, so that the
@@ -302,13 +278,11 @@ func registerEnqueue(task: Task, notificationConfigJsonString: String?, success:
     await updateGroupNotification(task: task, notificationType: success ? .running : .error, notificationConfig: notificationConfig)
 }
 
-
-
 /// Add action buttons to the notification
 ///
 /// Which button(s) depends on the [notificationType]. Action buttons are defined when defining the notification categories
 func addNotificationActions(task: Task, notificationType: NotificationType, content: UNMutableNotificationContent, notificationConfig: NotificationConfig) {
-    BDPlugin.propertyLock.withLock( {
+    BDPlugin.propertyLock.withLock {
         switch notificationType {
         case .running:
             content.categoryIdentifier = BDPlugin.taskIdsThatCanResume.contains(task.taskId) && notificationConfig.paused != nil ? NotificationCategory.runningWithPause.rawValue : NotificationCategory.runningWithoutPause.rawValue
@@ -321,7 +295,7 @@ func addNotificationActions(task: Task, notificationType: NotificationType, cont
         case .canceled:
             content.categoryIdentifier = NotificationCategory.canceled.rawValue
         }
-    })
+    }
 }
 
 /// Add cancel action button to the notificationGroup
@@ -332,11 +306,11 @@ func addCancelActionToNotificationGroup(content: UNMutableNotificationContent) {
 /// Returns the notificationType related to this [status]
 func notificationTypeForTaskStatus(status: TaskStatus) -> NotificationType {
     switch status {
-        case .enqueued, .running: return NotificationType.running
-        case .complete: return NotificationType.complete
-        case .paused: return NotificationType.paused
-        case .canceled: return NotificationType.canceled
-        default: return NotificationType.error
+    case .enqueued, .running: return NotificationType.running
+    case .complete: return NotificationType.complete
+    case .paused: return NotificationType.paused
+    case .canceled: return NotificationType.canceled
+    default: return NotificationType.error
     }
 }
 
@@ -357,14 +331,14 @@ func replaceTokens(input: String, task: Task, progress: Double? = nil, notificat
     displayNameRegEx.replaceMatches(in: inputString, range: NSMakeRange(0, inputString.length), withTemplate: task.displayName)
     fileNameRegEx.replaceMatches(in: inputString, range: NSMakeRange(0, inputString.length), withTemplate: task.filename)
     metaDataRegEx.replaceMatches(in: inputString, range: NSMakeRange(0, inputString.length), withTemplate: task.metaData)
-    if (progress == nil) {
-        progressRegEx.replaceMatches(in: inputString, range: NSMakeRange(0, inputString.length), withTemplate: "")}
-    else {
+    if progress == nil {
+        progressRegEx.replaceMatches(in: inputString, range: NSMakeRange(0, inputString.length), withTemplate: "")
+    } else {
         progressRegEx.replaceMatches(in: inputString, range: NSMakeRange(0, inputString.length), withTemplate: "\(Int(progress! * 100))%")
     }
     networkSpeedRegEx.replaceMatches(in: inputString, range: NSMakeRange(0, inputString.length), withTemplate: "-- MB/s")
     timeRemainingRegEx.replaceMatches(in: inputString, range: NSMakeRange(0, inputString.length), withTemplate: "--:--")
-    if (notificationGroup != nil) {
+    if notificationGroup != nil {
         let numFinished = await notificationGroup!.numFinished
         let numFailed = await notificationGroup!.numFailed
         let numTotal = await notificationGroup!.numTotal
@@ -380,7 +354,7 @@ func registerNotificationCategories() {
     // get values from shared preferences
     let defaults = UserDefaults.standard
     let localize = defaults.dictionary(forKey: BDPlugin.keyConfigLocalize)
-    
+
     // define the actions
     let cancelAction = UNNotificationAction(identifier: "cancel_action",
                                             title: localize?["Cancel"] as? String ?? "Cancel",
@@ -396,41 +370,41 @@ func registerNotificationCategories() {
                                             options: [])
     // Define the notification categories using these actions
     let runningWithPauseCategory =
-    UNNotificationCategory(identifier: NotificationCategory.runningWithPause.rawValue,
-                           actions: [cancelAction, pauseAction],
-                           intentIdentifiers: [],
-                           hiddenPreviewsBodyPlaceholder: "",
-                           options: .customDismissAction)
+        UNNotificationCategory(identifier: NotificationCategory.runningWithPause.rawValue,
+                               actions: [cancelAction, pauseAction],
+                               intentIdentifiers: [],
+                               hiddenPreviewsBodyPlaceholder: "",
+                               options: .customDismissAction)
     let runningWithoutPauseCategory =
-    UNNotificationCategory(identifier: NotificationCategory.runningWithoutPause.rawValue,
-                           actions: [cancelAction],
-                           intentIdentifiers: [],
-                           hiddenPreviewsBodyPlaceholder: "",
-                           options: .customDismissAction)
+        UNNotificationCategory(identifier: NotificationCategory.runningWithoutPause.rawValue,
+                               actions: [cancelAction],
+                               intentIdentifiers: [],
+                               hiddenPreviewsBodyPlaceholder: "",
+                               options: .customDismissAction)
     let pausedCategory =
-    UNNotificationCategory(identifier: NotificationCategory.paused.rawValue,
-                           actions: [cancelInactiveAction, resumeAction],
-                           intentIdentifiers: [],
-                           hiddenPreviewsBodyPlaceholder: "",
-                           options: .customDismissAction)
+        UNNotificationCategory(identifier: NotificationCategory.paused.rawValue,
+                               actions: [cancelInactiveAction, resumeAction],
+                               intentIdentifiers: [],
+                               hiddenPreviewsBodyPlaceholder: "",
+                               options: .customDismissAction)
     let completeCategory =
-    UNNotificationCategory(identifier: NotificationCategory.complete.rawValue,
-                           actions: [],
-                           intentIdentifiers: [],
-                           hiddenPreviewsBodyPlaceholder: "",
-                           options: .customDismissAction)
+        UNNotificationCategory(identifier: NotificationCategory.complete.rawValue,
+                               actions: [],
+                               intentIdentifiers: [],
+                               hiddenPreviewsBodyPlaceholder: "",
+                               options: .customDismissAction)
     let errorCategory =
-    UNNotificationCategory(identifier: NotificationCategory.error.rawValue,
-                           actions: [],
-                           intentIdentifiers: [],
-                           hiddenPreviewsBodyPlaceholder: "",
-                           options: .customDismissAction)
+        UNNotificationCategory(identifier: NotificationCategory.error.rawValue,
+                               actions: [],
+                               intentIdentifiers: [],
+                               hiddenPreviewsBodyPlaceholder: "",
+                               options: .customDismissAction)
     let canceledCategory =
-    UNNotificationCategory(identifier: NotificationCategory.canceled.rawValue,
-                           actions: [],
-                           intentIdentifiers: [],
-                           hiddenPreviewsBodyPlaceholder: "",
-                           options: .customDismissAction)
+        UNNotificationCategory(identifier: NotificationCategory.canceled.rawValue,
+                               actions: [],
+                               intentIdentifiers: [],
+                               hiddenPreviewsBodyPlaceholder: "",
+                               options: .customDismissAction)
     // Register the notification type.
     let notificationCenter = UNUserNotificationCenter.current()
     notificationCenter.setNotificationCategories([runningWithPauseCategory, runningWithoutPauseCategory, pausedCategory, completeCategory, errorCategory, canceledCategory])
@@ -444,12 +418,11 @@ func jsonStringFor(notificationConfig: NotificationConfig) -> String? {
         return nil
     }
     return String(data: jsonResultData, encoding: .utf8)
-    
 }
 
 /// Returns a NotificationConfig from the supplied jsonString, or nil
 func notificationConfigFrom(jsonString: String) -> NotificationConfig? {
     let decoder = JSONDecoder()
-    let notificationConfig: NotificationConfig? = try? decoder.decode(NotificationConfig.self, from: (jsonString).data(using: .utf8)!)
+    let notificationConfig: NotificationConfig? = try? decoder.decode(NotificationConfig.self, from: jsonString.data(using: .utf8)!)
     return notificationConfig
 }

@@ -46,10 +46,10 @@ struct Auth: Codable, Hashable {
         guard !queryParams.isEmpty else { return startUri }
 
         var components = URLComponents(url: startUri, resolvingAgainstBaseURL: false)!
-        var updatedQueryParams = components.queryItems?.reduce(into: [String: String]()) { (result, item) in
+        var updatedQueryParams = components.queryItems?.reduce(into: [String: String]()) { result, item in
             result[item.name] = item.value
         } ?? [:]
-        
+
         for (key, value) in queryParams {
             updatedQueryParams[key] = value
         }
@@ -57,7 +57,7 @@ struct Auth: Codable, Hashable {
         components.queryItems = updatedQueryParams.map { URLQueryItem(name: $0.key, value: $0.value) }
         return components.url!
     }
-    
+
     /// Returns true if the `accessTokenExpiryTime` is after now plus
     /// the `bufferTime`, otherwise returns false.
     func isTokenExpired(bufferTime: Int64 = 10000) -> Bool {
@@ -65,7 +65,7 @@ struct Auth: Codable, Hashable {
         let expiryTimeWithBuffer = Int64(Date().timeIntervalSince1970 * 1000) + bufferTime
         return expiryTimeWithBuffer > expiry
     }
-    
+
     /// Expands the [mapToExpand] by replacing {accessToken} and {refreshToken}
     ///
     /// Returns the expanded map, without changing the original
@@ -83,7 +83,7 @@ struct Auth: Codable, Hashable {
         }
         return newMap
     }
-    
+
     /// True if this `Auth` object has an 'onAuth' callback that can be called to refresh the
     /// access token.
     func hasOnAuthCallback() -> Bool {

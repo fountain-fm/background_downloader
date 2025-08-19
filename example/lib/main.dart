@@ -7,10 +7,11 @@ import 'package:background_downloader_example/isolate.dart';
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 
+enum ButtonState { download, cancel, pause, resume, reset }
+
 void main() {
   Logger.root.onRecord.listen((LogRecord rec) {
-    debugPrint(
-        '${rec.loggerName}>${rec.level.name}: ${rec.time}: ${rec.message}');
+    debugPrint('${rec.loggerName}>${rec.level.name}: ${rec.time}: ${rec.message}');
   });
 
   runApp(const MyApp());
@@ -31,13 +32,15 @@ class _MyAppState extends State<MyApp> {
   bool downloadWithError = false;
   TaskStatus? downloadTaskStatus;
   DownloadTask? backgroundDownloadTask;
-  StreamController<TaskProgressUpdate> progressUpdateStream =
-      StreamController();
+  StreamController<TaskProgressUpdate> progressUpdateStream = StreamController();
 
   bool loadAndOpenInProgress = false;
   bool loadABunchInProgress = false;
   bool loadBackgroundInProgress = false;
+  bool loadHLSInProgress = false;
+
   String? loadBackgroundResult;
+  String? loadHLSResult;
 
   @override
   void initState() {
@@ -65,36 +68,27 @@ class _MyAppState extends State<MyApp> {
 
     // Registering a callback and configure notifications
     FileDownloader()
-        .registerCallbacks(
-            taskNotificationTapCallback: myNotificationTapCallback)
+        .registerCallbacks(taskNotificationTapCallback: myNotificationTapCallback)
         .configureNotificationForGroup(FileDownloader.defaultGroup,
             // For the main download button
             // which uses 'enqueue' and a default group
-            running: const TaskNotification('Download {filename}',
-                'File: {filename} - {progress} - speed {networkSpeed} and {timeRemaining} remaining'),
-            complete: const TaskNotification(
-                '{displayName} download {filename}', 'Download complete'),
-            error: const TaskNotification(
-                'Download {filename}', 'Download failed'),
-            paused: const TaskNotification(
-                'Download {filename}', 'Paused with metadata {metadata}'),
+            running: const TaskNotification('Download {filename}', 'File: {filename} - {progress} - speed {networkSpeed} and {timeRemaining} remaining'),
+            complete: const TaskNotification('{displayName} download {filename}', 'Download complete'),
+            error: const TaskNotification('Download {filename}', 'Download failed'),
+            paused: const TaskNotification('Download {filename}', 'Paused with metadata {metadata}'),
             canceled: const TaskNotification('Download {filename}', 'Canceled'),
             progressBar: true)
         .configureNotificationForGroup('bunch',
-            running: const TaskNotification(
-                '{numFinished} out of {numTotal}', 'Progress = {progress}'),
-            complete:
-                const TaskNotification("Done!", "Loaded {numTotal} files"),
-            error: const TaskNotification(
-                'Error', '{numFailed}/{numTotal} failed'),
+            running: const TaskNotification('{numFinished} out of {numTotal}', 'Progress = {progress}'),
+            complete: const TaskNotification("Done!", "Loaded {numTotal} files"),
+            error: const TaskNotification('Error', '{numFailed}/{numTotal} failed'),
             progressBar: false,
             groupNotificationId: 'notGroup')
         .configureNotification(
             // for the 'Download & Open' dog picture
             // which uses 'download' which is not the .defaultGroup
             // but the .await group so won't use the above config
-            complete: const TaskNotification(
-                'Download {filename}', 'Download complete'),
+            complete: const TaskNotification('Download {filename}', 'Download complete'),
             tapOpensFile: true); // dog can also open directly from tap
 
     // Listen to updates and process
@@ -125,8 +119,7 @@ class _MyAppState extends State<MyApp> {
 
   /// Process the user tapping on a notification by printing a message
   void myNotificationTapCallback(Task task, NotificationType notificationType) {
-    debugPrint(
-        'Tapped notification $notificationType for taskId ${task.taskId}');
+    debugPrint('Tapped notification $notificationType for taskId ${task.taskId}');
   }
 
   @override
@@ -143,32 +136,35 @@ class _MyAppState extends State<MyApp> {
         ),
       ),
       home: Scaffold(
-          appBar: AppBar(
-            title: const Text('background_downloader example app'),
-          ),
-          body: Center(
-              child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Text('RequireWiFi setting',
-                          style: Theme.of(context).textTheme.titleLarge),
-                      const RequireWiFiChoice(),
-                    ],
+        appBar: AppBar(
+          title: const Text('background_downloader example app'),
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: SingleChildScrollView(
+            child: SizedBox(
+              width: double.infinity,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  /// =============================================
+                  // RequireWiFi setting
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: Column(
+                      spacing: 4,
+                      children: [
+                        Text('RequireWiFi setting', style: Theme.of(context).textTheme.titleLarge),
+                        const RequireWiFiChoice(),
+                      ],
+                    ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
+
+                  /// =============================================
+                  // Download with error setting
+                  Row(
                     children: [
-                      Expanded(
-                          child: Text('Force error',
-                              style: Theme.of(context).textTheme.titleLarge)),
+                      Expanded(child: Text('Force error', style: Theme.of(context).textTheme.titleLarge)),
                       Switch(
                           value: downloadWithError,
                           onChanged: (value) {
@@ -178,98 +174,120 @@ class _MyAppState extends State<MyApp> {
                           })
                     ],
                   ),
-                ),
-                Center(
-                    child: ElevatedButton(
-                  onPressed: processButtonPress,
-                  child: Text(
-                    buttonTexts[buttonState.index],
+                  const Divider(
+                    height: 12,
+                    thickness: 3,
+                    color: Colors.blueGrey,
                   ),
-                )),
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Row(
-                    children: [
-                      const Expanded(child: Text('File download status:')),
-                      Text('${downloadTaskStatus ?? "undefined"}')
-                    ],
-                  ),
-                ),
-                const Divider(
-                  height: 30,
-                  thickness: 5,
-                  color: Colors.blueGrey,
-                ),
-                Center(
+
+                  /// =============================================
+                  // Download button
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
                     child: ElevatedButton(
-                        onPressed:
-                            loadAndOpenInProgress ? null : processLoadAndOpen,
+                      onPressed: processButtonPress,
+                      child: Text(buttonTexts[buttonState.index]),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [const Expanded(child: Text('File download status:')), Text('${downloadTaskStatus ?? "undefined"}')],
+                    ),
+                  ),
+                  const Divider(
+                    height: 12,
+                    thickness: 4,
+                    color: Colors.blueGrey,
+                  ),
+
+                  /// ============================================
+                  /// Load And Open
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: ElevatedButton(
+                        onPressed: loadAndOpenInProgress ? null : processLoadAndOpen,
                         child: Text(
                           Platform.isIOS
                               ? 'Load, open and add'
                               : Platform.isAndroid
                                   ? 'Load, open and move'
                                   : 'Load & Open',
-                        ))),
-                Center(
-                    child: Text(
-                  loadAndOpenInProgress ? 'Busy' : '',
-                )),
-                const Divider(
-                  height: 30,
-                  thickness: 5,
-                  color: Colors.blueGrey,
-                ),
-                Center(
-                    child: ElevatedButton(
-                        onPressed:
-                            loadABunchInProgress ? null : processLoadABunch,
-                        child: const Text('Load a bunch'))),
-                Center(child: Text(loadABunchInProgress ? 'Enqueueing' : '')),
-                const Divider(
-                  height: 30,
-                  thickness: 5,
-                  color: Colors.blueGrey,
-                ),
-                Center(
-                  child: ElevatedButton(
-                    onPressed:
-                        loadBackgroundInProgress ? null : processLoadBackground,
-                    child: const Text(
-                      'Load in background',
-                    ),
+                        )),
                   ),
-                ),
-                Center(
-                  child: Text(
-                    loadBackgroundInProgress
-                        ? 'Working...'
-                        : loadBackgroundResult ?? '',
-                  ),
-                ),
-                if (onMobile)
+                  Center(child: Text(loadAndOpenInProgress ? 'Busy' : '')),
                   const Divider(
-                    height: 30,
-                    thickness: 5,
+                    height: 12,
+                    thickness: 4,
                     color: Colors.blueGrey,
                   ),
-                if (onMobile)
-                  Center(
+
+                  /// ============================================
+                  /// Bulk
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: ElevatedButton(onPressed: loadABunchInProgress ? null : processLoadABunch, child: const Text('Load a bunch')),
+                  ),
+                  Text(loadABunchInProgress ? 'Enqueueing' : ''),
+                  const Divider(
+                    height: 12,
+                    thickness: 4,
+                    color: Colors.blueGrey,
+                  ),
+
+                  /// ============================================
+                  /// Background
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
                     child: ElevatedButton(
-                      onPressed: processPickDirectory,
+                      onPressed: loadBackgroundInProgress ? null : processLoadBackground,
+                      child: const Text('Load in background'),
+                    ),
+                  ),
+                  Text(loadBackgroundInProgress ? 'Working...' : loadBackgroundResult ?? ''),
+                  const Divider(
+                    height: 12,
+                    thickness: 4,
+                    color: Colors.blueGrey,
+                  ),
+
+                  /// ============================================
+                  /// Download HLS
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: ElevatedButton(
+                      onPressed: loadBackgroundInProgress ? null : processLoadHLS,
                       child: const Text(
-                        'Pick destination',
+                        'Download HLS',
                       ),
                     ),
                   ),
-              ],
+                  Text(loadHLSInProgress ? 'Working...' : loadHLSResult ?? ''),
+
+                  /// ============================================
+                  // Bottom Divider
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 120),
+                    child: Divider(
+                      height: 12,
+                      thickness: 4,
+                      color: Colors.blueGrey,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          )),
-          bottomSheet: DownloadProgressIndicator(progressUpdateStream.stream,
-              showPauseButton: true,
-              showCancelButton: true,
-              backgroundColor: Colors.grey,
-              maxExpandable: 3)),
+          ),
+        ),
+        bottomSheet: DownloadProgressIndicator(progressUpdateStream.stream,
+            showPauseButton: true, showCancelButton: true, backgroundColor: Colors.grey, maxExpandable: 3),
+        floatingActionButton: onMobile
+            ? ElevatedButton(
+                onPressed: processPickDirectory,
+                child: const Text('Pick destination'),
+              )
+            : null,
+      ),
     );
   }
 
@@ -284,12 +302,6 @@ class _MyAppState extends State<MyApp> {
             url: downloadWithError
                 ? 'https://avmaps-dot-bbflightserver-hrd.appspot.com/public/get_current_app_data' // returns 403 status code
                 : 'https://storage.googleapis.com/approachcharts/test/5MB-test.ZIP',
-            filename: 'zipfile.zip',
-            directory: 'my/directory',
-            baseDirectory: BaseDirectory.applicationDocuments,
-            updates: Updates.statusAndProgress,
-            retries: 3,
-            allowPause: true,
             metaData: '<example metaData>',
             displayName: 'My display name');
         await FileDownloader().enqueue(backgroundDownloadTask!);
@@ -297,8 +309,7 @@ class _MyAppState extends State<MyApp> {
       case ButtonState.cancel:
         // cancel download
         if (backgroundDownloadTask != null) {
-          await FileDownloader()
-              .cancelTasksWithIds([backgroundDownloadTask!.taskId]);
+          await FileDownloader().cancelTasksWithIds([backgroundDownloadTask!.taskId]);
         }
         break;
       case ButtonState.reset:
@@ -328,8 +339,7 @@ class _MyAppState extends State<MyApp> {
     if (!loadAndOpenInProgress) {
       await getPermission(PermissionType.notifications);
       var task = DownloadTask(
-          url:
-              'https://i2.wp.com/www.skiptomylou.org/wp-content/uploads/2019/06/dog-drawing.jpg',
+          url: 'https://i2.wp.com/www.skiptomylou.org/wp-content/uploads/2019/06/dog-drawing.jpg',
           baseDirectory: BaseDirectory.applicationSupport,
           filename: 'dog.jpg');
       setState(() {
@@ -340,25 +350,17 @@ class _MyAppState extends State<MyApp> {
       if (Platform.isIOS) {
         // add to photos library and print path
         // If you need the path, ask full permissions beforehand by calling
-        var auth = await FileDownloader()
-            .permissions
-            .status(PermissionType.iosChangePhotoLibrary);
+        var auth = await FileDownloader().permissions.status(PermissionType.iosChangePhotoLibrary);
         if (auth != PermissionStatus.granted) {
-          auth = await FileDownloader()
-              .permissions
-              .request(PermissionType.iosChangePhotoLibrary);
+          auth = await FileDownloader().permissions.request(PermissionType.iosChangePhotoLibrary);
         }
         if (auth == PermissionStatus.granted) {
-          final identifier = await FileDownloader()
-              .moveToSharedStorage(task, SharedStorage.images);
+          final identifier = await FileDownloader().moveToSharedStorage(task, SharedStorage.images);
           if (identifier != null) {
-            final path = await FileDownloader()
-                .pathInSharedStorage(identifier, SharedStorage.images);
-            debugPrint(
-                'iOS path to dog picture in Photos Library = ${path ?? "permission denied"}');
+            final path = await FileDownloader().pathInSharedStorage(identifier, SharedStorage.images);
+            debugPrint('iOS path to dog picture in Photos Library = ${path ?? "permission denied"}');
           } else {
-            debugPrint(
-                'Could not add file to Photos Library, likely because permission denied');
+            debugPrint('Could not add file to Photos Library, likely because permission denied');
           }
         } else {
           debugPrint('iOS Photo Library permission not granted');
@@ -368,19 +370,13 @@ class _MyAppState extends State<MyApp> {
         // on Android we move, not add, so we first wat for the
         // openFile method to complete
         await Future.delayed(const Duration(seconds: 3));
-        var auth = await FileDownloader()
-            .permissions
-            .status(PermissionType.androidSharedStorage);
+        var auth = await FileDownloader().permissions.status(PermissionType.androidSharedStorage);
         if (auth != PermissionStatus.granted) {
-          auth = await FileDownloader()
-              .permissions
-              .request(PermissionType.androidSharedStorage);
+          auth = await FileDownloader().permissions.request(PermissionType.androidSharedStorage);
         }
         if (auth == PermissionStatus.granted) {
-          final path = await FileDownloader()
-              .moveToSharedStorage(task, SharedStorage.images);
-          debugPrint(
-              'Android path to dog picture in .images = ${path ?? "permission denied"}');
+          final path = await FileDownloader().moveToSharedStorage(task, SharedStorage.images);
+          debugPrint('Android path to dog picture in .images = ${path ?? "permission denied"}');
         } else {
           debugPrint('androidSharedStorage permission not granted');
         }
@@ -399,8 +395,7 @@ class _MyAppState extends State<MyApp> {
       await getPermission(PermissionType.notifications);
       for (var i = 0; i < 5; i++) {
         await FileDownloader().enqueue(DownloadTask(
-            url:
-                'https://storage.googleapis.com/approachcharts/test/5MB-test.ZIP',
+            url: 'https://storage.googleapis.com/approachcharts/test/5MB-test.ZIP',
             filename: 'File_${Random().nextInt(1000)}',
             group: 'bunch',
             updates: Updates.progress)); // must provide progress updates!
@@ -433,11 +428,7 @@ class _MyAppState extends State<MyApp> {
       return;
     }
     log.fine('Uri = $uri');
-    final task = UriDownloadTask(
-        url:
-            'https://i2.wp.com/www.skiptomylou.org/wp-content/uploads/2019/06/dog-drawing.jpg',
-        directoryUri: uri,
-        filename: '?');
+    final task = UriDownloadTask(url: 'https://i2.wp.com/www.skiptomylou.org/wp-content/uploads/2019/06/dog-drawing.jpg', directoryUri: uri, filename: '?');
     final result = await FileDownloader().download(task);
     final resultTask = result.task as UriDownloadTask;
     log.info('Download to URI completed with taskStatus ${result.status}');
@@ -449,13 +440,38 @@ class _MyAppState extends State<MyApp> {
   Future<void> getPermission(PermissionType permissionType) async {
     var status = await FileDownloader().permissions.status(permissionType);
     if (status != PermissionStatus.granted) {
-      if (await FileDownloader()
-          .permissions
-          .shouldShowRationale(permissionType)) {
+      if (await FileDownloader().permissions.shouldShowRationale(permissionType)) {
         debugPrint('Showing some rationale');
       }
       status = await FileDownloader().permissions.request(permissionType);
       debugPrint('Permission for $permissionType was $status');
+    }
+  }
+
+  /// `processLoadHLS`
+  Future<void> processLoadHLS() async {
+    // HLS download task
+    if (!loadHLSInProgress) {
+      final HlsDownloadTask hlsTask = HlsDownloadTask(
+          taskId: 'hlsTask',
+          url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+          filename: 'hls.m3u8',
+          quality: HlsQuality.q720,
+          retries: 3,
+          allowPause: true,
+          headers: {},
+          baseDirectory: BaseDirectory.applicationSupport,
+          directory: Directory.current.path,
+          updates: Updates.statusAndProgress);
+      setState(() {
+        loadHLSInProgress = true;
+      });
+      await download(task: hlsTask);
+      debugPrint("Downloaded to: ${await hlsTask.filePath()}");
+      setState(() {
+        // loadHLSResult = result;
+        loadHLSInProgress = false;
+      });
     }
   }
 }
@@ -485,10 +501,8 @@ class _RequireWiFiChoiceState extends State<RequireWiFiChoice> {
   Widget build(BuildContext context) {
     return SegmentedButton<RequireWiFi>(
       segments: const <ButtonSegment<RequireWiFi>>[
-        ButtonSegment<RequireWiFi>(
-            value: RequireWiFi.asSetByTask, label: Text('Task')),
-        ButtonSegment<RequireWiFi>(
-            value: RequireWiFi.forAllTasks, label: Text('All')),
+        ButtonSegment<RequireWiFi>(value: RequireWiFi.asSetByTask, label: Text('Task')),
+        ButtonSegment<RequireWiFi>(value: RequireWiFi.forAllTasks, label: Text('All')),
         ButtonSegment<RequireWiFi>(
           value: RequireWiFi.forNoTasks,
           label: Text('None'),
@@ -501,12 +515,9 @@ class _RequireWiFiChoiceState extends State<RequireWiFiChoice> {
           // selected at one time, so its value is always the first
           // item in the selected set.
           requireWiFi = newSelection.first;
-          unawaited(FileDownloader()
-              .requireWiFi(requireWiFi, rescheduleRunningTasks: true));
+          unawaited(FileDownloader().requireWiFi(requireWiFi, rescheduleRunningTasks: true));
         });
       },
     );
   }
 }
-
-enum ButtonState { download, cancel, pause, resume, reset }
